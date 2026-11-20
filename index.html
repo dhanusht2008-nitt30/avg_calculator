@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Anonymous Class Average</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 420px;
+            margin: 60px auto;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            text-align: center;
+        }
+        input {
+            padding: 10px;
+            font-size: 16px;
+            width: 70%;
+            margin-bottom: 12px;
+        }
+        button {
+            padding: 10px 18px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+        .box {
+            margin-top: 25px;
+            padding: 15px;
+            background-color: #f4f4f4;
+            border-radius: 6px;
+        }
+        #status {
+            color: green;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <h2>Anonymous Class Average</h2>
+    <p>Your mark is added directly to the running total and never stored.</p>
+
+    <div id="form-section">
+        <input type="number" id="scoreInput" placeholder="Enter your mark (0-100)" step="any" required>
+        <br>
+        <button onclick="submitScore()">Submit Mark</button>
+    </div>
+    <p id="status"></p>
+
+    <div class="box">
+        <h3>Class Result</h3>
+        <p id="resultText">Checking submissions...</p>
+    </div>
+
+    <!-- Firebase SDKs (Compat version for simple single-file usage) -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+
+    <script>
+        // PASTE YOUR FIREBASE CONFIG HERE
+      const firebaseConfig = {
+         apiKey: "AIzaSyCDNSGMR62BvdxFs83PLfTXxhHwaizWrME",
+         authDomain: "class-average.firebaseapp.com",
+         projectId: "class-average",
+         storageBucket: "class-average.firebasestorage.app",
+         messagingSenderId: "211241236312",
+         appId: "1:211241236312:web:968517b3c44a212081572d"
+};
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+        const statsRef = db.ref('class_stats');
+
+        // Hide form if this browser already submitted
+        if (localStorage.getItem('hasSubmitted') === 'true') {
+            document.getElementById('form-section').style.display = 'none';
+            document.getElementById('status').innerText = "You have already submitted your mark.";
+        }
+
+        async function submitScore() {
+            const input = document.getElementById('scoreInput');
+            const status = document.getElementById('status');
+            const score = parseFloat(input.value);
+
+            if (isNaN(score) || score < 0 || score > 100) {
+                status.style.color = 'red';
+                status.innerText = 'Please enter a valid mark between 0 and 100.';
+                return;
+            }
+
+            try {
+                // Atomically increment both values on Google's server without reading them
+                await statsRef.update({
+                    totalSum: firebase.database.ServerValue.increment(score),
+                    count: firebase.database.ServerValue.increment(1)
+                });
+
+                localStorage.setItem('hasSubmitted', 'true');
+                document.getElementById('form-section').style.display = 'none';
+                status.style.color = 'green';
+                status.innerText = 'Mark added anonymously!';
+                listenForAverage();
+            } catch (error) {
+                status.style.color = 'red';
+                status.innerText = 'Submission blocked by security rules. Try again.';
+            }
+        }
+
+        function listenForAverage() {
+            const resultText = document.getElementById('resultText');
+
+            // Real-time listener: automatically updates everyone's screen when count >= 3
+            statsRef.on('value', (snapshot) => {
+                const data = snapshot.val();
+                if (data && data.count >= 3) {
+                    const avg = (data.totalSum / data.count).toFixed(2);
+                    resultText.innerHTML = `<strong>Average: ${avg}</strong> <br> (Based on ${data.count} submissions)`;
+                }
+            }, (error) => {
+                // Firebase throws PERMISSION_DENIED while count < 3, keeping early marks hidden
+                resultText.innerText = "Locked for privacy: Waiting for at least 3 classmates to submit...";
+            });
+        }
+
+        // Start listening immediately on page load
+        listenForAverage();
+    </script>
+
+</body>
+</html>
